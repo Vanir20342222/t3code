@@ -125,6 +125,7 @@ import {
 } from "./thread-settings-sheet-state";
 import { formatProviderUpdateRequiredNotice } from "@t3tools/client-runtime/providerUpdateRequiredModels";
 import type { MessageResolver } from "../../i18n/messages";
+import { modelPickerInstancesForHost } from "@t3tools/client-runtime/provider-clients";
 
 const PRIMARY_PROVIDER_DRIVERS: ReadonlySet<string> = new Set([
   "claudeAgent",
@@ -355,7 +356,7 @@ function ThreadSettingsSessionProvider(
     new Map<string, { favorite: boolean; settings: ServerSettings; pending: boolean }>(),
   );
   const [pendingHiddenKeys, setPendingHiddenKeys] = useState<ReadonlySet<string>>(() => new Set());
-  const providerGroups =
+  const allProviderGroups =
     manageHidden && config
       ? groupByProvider(
           buildModelOptions(
@@ -367,6 +368,14 @@ function ThreadSettingsSessionProvider(
           ),
         )
       : props.providerGroups;
+  const providerGroups = modelPickerInstancesForHost(
+    allProviderGroups,
+    props.selectedModel?.instanceId,
+    (group) => ({
+      instanceId: group.models[0]?.selection.instanceId ?? "",
+      driver: group.models[0]?.providerDriver ?? "",
+    }),
+  );
   const legacyFavorites = AsyncResult.isSuccess(preferences)
     ? (preferences.value.modelFavorites ?? EMPTY_MODEL_FAVORITES)
     : EMPTY_MODEL_FAVORITES;

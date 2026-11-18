@@ -98,6 +98,7 @@ it("keeps each registry image when adding a model from another ACP agent", async
 
 it("keeps a docked picker open after a pick and hands focus to that model's effort", async () => {
   const instanceId = ProviderInstanceId.make("codex");
+  const cloudId = ProviderInstanceId.make("cloud_claudeAgent");
   const entries = deriveProviderInstanceEntries([
     {
       instanceId,
@@ -112,8 +113,23 @@ it("keeps a docked picker open after a pick and hands focus to that model's effo
       slashCommands: [],
       skills: [],
     },
+    {
+      instanceId: cloudId,
+      driver: ProviderDriverKind.make("claudeCloud"),
+      displayName: "Claude Cloud",
+      enabled: true,
+      installed: true,
+      version: null,
+      status: "ready",
+      auth: { status: "authenticated" },
+      checkedAt: "2026-01-01T00:00:00.000Z",
+      models: [{ slug: "cloud", name: "Cloud session", isCustom: false, capabilities: null }],
+      slashCommands: [],
+      skills: [],
+    },
   ]);
   const options = new Map([
+    [cloudId, [{ slug: "cloud", name: "Cloud session" }]],
     [
       instanceId,
       [
@@ -160,6 +176,10 @@ it("keeps a docked picker open after a pick and hands focus to that model's effo
 
   await using screen = await render(<Picker />);
   await screen.getByRole("button", { name: "Choose model" }).click();
+  await expect
+    .element(page.getByRole("button", { name: "Claude Cloud", exact: true }))
+    .not.toBeInTheDocument();
+  await expect.element(page.getByRole("option", { name: /Cloud session/ })).not.toBeInTheDocument();
   const search = page.getByPlaceholder("Search models...");
   await expect.element(search).toHaveFocus();
   await userEvent.keyboard("{ArrowRight}");

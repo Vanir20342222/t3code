@@ -1,9 +1,12 @@
 import {
+  cloudProviderInstanceId,
   defaultInstanceIdForDriver,
   PROVIDER_DISPLAY_NAMES,
   type ProviderDriverKind,
   type ServerProvider,
 } from "@t3tools/contracts";
+
+import { providerBrandDriverKind } from "../providerClients.ts";
 
 function humanizeSlug(slug: string): string {
   return slug
@@ -19,7 +22,14 @@ export function resolveProviderInstanceDisplayName(
   const trimmedSnapshotName = snapshot.displayName?.trim();
   const kindLabel = PROVIDER_DISPLAY_NAMES[snapshot.driver] ?? humanizeSlug(snapshot.driver);
   if (trimmedSnapshotName && trimmedSnapshotName !== kindLabel) return trimmedSnapshotName;
-  if (snapshot.instanceId !== defaultInstanceIdForDriver(snapshot.driver)) {
+  // The default cloud instance is named after its source's default instance, as `cloud_claudeAgent`.
+  const defaultInstanceId =
+    providerBrandDriverKind(snapshot.driver) === snapshot.driver
+      ? defaultInstanceIdForDriver(snapshot.driver)
+      : cloudProviderInstanceId(
+          defaultInstanceIdForDriver(providerBrandDriverKind(snapshot.driver)),
+        );
+  if (snapshot.instanceId !== defaultInstanceId) {
     const humanized = humanizeSlug(snapshot.instanceId);
     if (humanized.length > 0) return humanized;
   }

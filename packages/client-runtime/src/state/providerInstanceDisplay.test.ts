@@ -1,10 +1,11 @@
-import { ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   normalizeProviderAccentColor,
   providerAccentForegroundColor,
   providerInstanceInitials,
+  resolveProviderInstanceDisplayName,
   shouldShowInstanceBadge,
 } from "./providerInstanceDisplay.ts";
 
@@ -24,6 +25,20 @@ describe("providerInstanceInitials", () => {
   it("keeps an emoji whole instead of splitting its surrogate pair", () => {
     expect(providerInstanceInitials("😀 Work")).toBe("😀W");
     expect(providerInstanceInitials("😀")).toBe("😀");
+  });
+});
+
+describe("resolveProviderInstanceDisplayName", () => {
+  it("names the default cloud instance after its driver, not its id", () => {
+    const name = (instanceId: string, driver: string, displayName: string) =>
+      resolveProviderInstanceDisplayName({
+        instanceId: ProviderInstanceId.make(instanceId),
+        driver: ProviderDriverKind.make(driver),
+        displayName,
+      });
+    expect(name("cloud_claudeAgent", "claudeCloud", "Claude Cloud")).toBe("Claude Cloud");
+    expect(name("cloud_codex", "codexCloud", "Codex Cloud")).toBe("Codex Cloud");
+    expect(name("cloud_claude_work", "claudeCloud", "Claude Cloud")).toBe("Cloud Claude Work");
   });
 });
 

@@ -1,3 +1,4 @@
+import type { CloudMachineControls } from "@t3tools/client-runtime/provider-clients";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import {
   ClipboardApiUnavailableError,
@@ -44,7 +45,10 @@ import {
   BranchToolbarBranchSelector,
   type BranchToolbarBranchSelectorHandle,
 } from "./BranchToolbarBranchSelector";
-import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
+import {
+  BranchToolbarEnvironmentSelector,
+  CloudMachineRow,
+} from "./BranchToolbarEnvironmentSelector";
 import { openAddProjectToMachine } from "./AddProjectToMachineDialog";
 import { type AddProjectTarget, useAddProjectTargets } from "../hooks/useAddProjectTargets";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
@@ -111,6 +115,7 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   /** Shown at the end of the composer strip, such as the new thread's permissions. */
   trailing?: ReactNode;
+  cloudMachines?: CloudMachineControls | undefined;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
 }
@@ -158,6 +163,7 @@ interface RunContextSelectorProps {
   envLocked: boolean;
   envModeLocked: boolean;
   environmentId: EnvironmentId;
+  cloudMachines?: CloudMachineControls | undefined;
   availableEnvironments: readonly EnvironmentOption[] | undefined;
   showEnvironmentPicker: boolean;
   showEnvironmentIndicator: boolean;
@@ -182,6 +188,7 @@ const RunContextSelector = memo(function RunContextSelector({
   envModeLocked,
   environmentId,
   availableEnvironments,
+  cloudMachines,
   showEnvironmentPicker,
   showEnvironmentIndicator,
   onEnvironmentChange,
@@ -197,6 +204,9 @@ const RunContextSelector = memo(function RunContextSelector({
   const gt = useGT();
   const m = useMessages();
   const composerFloatingLayerProps = useComposerMenuProps();
+  const activeCloud = cloudMachines?.targets.find(
+    (target) => target.instanceId === cloudMachines.selectedInstanceId,
+  );
   const activeEnvironment =
     availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
   const WorkspaceIcon =
@@ -247,7 +257,7 @@ const RunContextSelector = memo(function RunContextSelector({
           />
         ) : (
           <EnvironmentMachineIcon
-            kind={activeEnvironment?.machine ?? "server"}
+            kind={activeCloud ? "cloud" : (activeEnvironment?.machine ?? "server")}
             // Wide machine glyphs need a little more box to match the square row icons.
             className={
               isPanel ? cn(THREAD_DETAILS_PANEL_ICON_CLASS, "-mx-px size-4.5") : "size-3 shrink-0"
@@ -256,7 +266,7 @@ const RunContextSelector = memo(function RunContextSelector({
         )}
       </TooltipTrigger>
       <TooltipPopup>
-        {autoEnvironmentLabel ?? activeEnvironment?.label ?? gt("Run on")}
+        {autoEnvironmentLabel ?? activeCloud?.label ?? activeEnvironment?.label ?? gt("Run on")}
       </TooltipPopup>
     </Tooltip>
   );
@@ -266,7 +276,9 @@ const RunContextSelector = memo(function RunContextSelector({
       {icon}
       <ComposerContextLabel displayMode={displayMode}>
         {autoEnvironmentLabel ??
-          (showEnvironmentIndicator ? (activeEnvironment?.label ?? gt("Run on")) : workspaceLabel)}
+          (showEnvironmentIndicator
+            ? (activeCloud?.label ?? activeEnvironment?.label ?? gt("Run on"))
+            : workspaceLabel)}
       </ComposerContextLabel>
       {/* Trailing in the panel, so every row label starts on the same edge. */}
       {isPanel && showEnvironmentIndicator ? workspaceIcon : null}
@@ -285,7 +297,10 @@ const RunContextSelector = memo(function RunContextSelector({
         aria-label={
           isPanel
             ? gt("Run context: {context}", {
-                context: [autoEnvironmentLabel ?? activeEnvironment?.label, workspaceLabel]
+                context: [
+                  autoEnvironmentLabel ?? activeCloud?.label ?? activeEnvironment?.label,
+                  workspaceLabel,
+                ]
                   .filter(Boolean)
                   .join(", "),
               })
@@ -314,7 +329,10 @@ const RunContextSelector = memo(function RunContextSelector({
         aria-label={
           isPanel
             ? gt("Run context: {context}", {
-                context: [autoEnvironmentLabel ?? activeEnvironment?.label, workspaceLabel]
+                context: [
+                  autoEnvironmentLabel ?? activeCloud?.label ?? activeEnvironment?.label,
+                  workspaceLabel,
+                ]
                   .filter(Boolean)
                   .join(", "),
               })
@@ -348,12 +366,25 @@ const RunContextSelector = memo(function RunContextSelector({
                 <T>Run on</T>
               </MenuGroupLabel>
               <MenuRadioGroup
-                value={autoEnvironmentLabel ? "auto" : environmentId}
-                onValueChange={(value) =>
-                  value === "auto"
-                    ? onAutoEnvironment?.()
-                    : onEnvironmentChange?.(value as EnvironmentId)
+                value={
+                  activeCloud
+                    ? `cloud:${activeCloud.instanceId}`
+                    : autoEnvironmentLabel
+                      ? "auto"
+                      : environmentId
                 }
+                onValueChange={(value) => {
+                  const target = cloudMachines?.targets.find(
+                    (target) => `cloud:${target.instanceId}` === value,
+                  );
+                  if (target) {
+                    if (!target.disabledReason) cloudMachines?.onSelect(target.instanceId);
+                    return;
+                  }
+                  cloudMachines?.onSelect(null);
+                  if (value === "auto") onAutoEnvironment?.();
+                  else onEnvironmentChange?.(value as EnvironmentId);
+                }}
               >
                 {onAutoEnvironment && (
                   <MenuRadioItem
@@ -385,6 +416,16 @@ const RunContextSelector = memo(function RunContextSelector({
                       <EnvironmentMachineIcon kind={env.machine} className="size-3" />
                       <span className="min-w-0 truncate">{env.label}</span>
                     </span>
+                  </MenuRadioItem>
+                ))}
+                {cloudMachines?.targets.map((target) => (
+                  <MenuRadioItem
+                    key={target.instanceId}
+                    value={`cloud:${target.instanceId}`}
+                    disabled={envLocked || target.disabledReason !== null}
+                    closeOnClick
+                  >
+                    <CloudMachineRow target={target} />
                   </MenuRadioItem>
                 ))}
               </MenuRadioGroup>
@@ -644,6 +685,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onCheckoutPullRequestRequest,
   onComposerFocusRequest,
   availableEnvironments,
+  cloudMachines,
   onEnvironmentChange,
   trailing,
 }: BranchToolbarProps) {
@@ -703,7 +745,10 @@ export const BranchToolbar = memo(function BranchToolbar({
   const onAddToMachine = (targetEnvironmentId: EnvironmentId | null) =>
     openAddProjectToMachine({ projectRef: activeProjectRef, targetEnvironmentId });
   // A project on one machine still gets the picker when it can be added to another.
-  const hasMultipleEnvironments = (availableEnvironments?.length ?? 0) > 1 || addTargets.length > 0;
+  const hasMultipleEnvironments =
+    (availableEnvironments?.length ?? 0) > 1 ||
+    addTargets.length > 0 ||
+    (cloudMachines?.targets.length ?? 0) > 0;
   const showEnvironmentPicker = hasMultipleEnvironments && onEnvironmentChange !== undefined;
   const activeEnvironmentOption =
     availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
@@ -731,6 +776,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             envModeLocked={envModeLocked}
             environmentId={environmentId}
             availableEnvironments={availableEnvironments}
+            cloudMachines={cloudMachines}
             showEnvironmentPicker={showEnvironmentPicker}
             showEnvironmentIndicator={activeEnvironmentOption !== null}
             onEnvironmentChange={onEnvironmentChange}
@@ -781,6 +827,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             envModeLocked={envModeLocked}
             environmentId={environmentId}
             availableEnvironments={availableEnvironments}
+            cloudMachines={cloudMachines}
             showEnvironmentPicker={showEnvironmentPicker}
             showEnvironmentIndicator={showEnvironmentIndicator}
             onEnvironmentChange={onEnvironmentChange}
@@ -811,6 +858,7 @@ export const BranchToolbar = memo(function BranchToolbar({
                 envLocked={envLocked}
                 environmentId={environmentId}
                 availableEnvironments={availableEnvironments}
+                cloudMachines={cloudMachines}
                 {...(showEnvironmentPicker ? { onEnvironmentChange } : {})}
                 {...(addTargets.length > 0 ? { onAddToMachine: () => onAddToMachine(null) } : {})}
               />

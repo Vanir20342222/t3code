@@ -546,6 +546,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: [msg("beta link another machine vps peer agents work there delegate")],
   },
   {
+    id: "cloud-sessions-beta",
+    title: msg("Cloud sessions"),
+    to: "/settings/labs",
+    scope: "environment",
+    searchTerms: [msg("beta claude cloud codex cloud run on remote sessions")],
+  },
+  {
     id: "prompt-suggestions-beta",
     title: msg("Suggest next prompt"),
     to: "/settings/labs",

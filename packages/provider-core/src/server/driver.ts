@@ -61,6 +61,12 @@ export interface ProviderInstance {
   readonly consumeResetCredit?: (
     creditId: string | undefined,
   ) => Effect.Effect<ProviderConsumeResetCreditOutcome, ProviderDriverError>;
+  /** Starts slow remote setup ahead of the first message; best effort, never fails. */
+  readonly warmUp?: (input: {
+    readonly model: string | undefined;
+    /** The project's folder, so remote setup matches its repository. */
+    readonly cwd: string | undefined;
+  }) => Effect.Effect<void>;
   readonly orchestrationAdapter: ProviderAdapter.ProviderAdapterV2["Service"];
   readonly textGeneration: ProviderTextGeneration;
   readonly auth?: ProviderAuthController;

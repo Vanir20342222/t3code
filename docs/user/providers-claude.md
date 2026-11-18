@@ -156,3 +156,37 @@ config directory and put the router's endpoint and credential variables in that
 instance's **Environment variables**. The router must run where the environment
 can reach it. Follow the [Claude Code Router instructions](https://github.com/musistudio/claude-code-router)
 for its installation and routing configuration.
+
+## Run sessions in Claude Cloud
+
+Claude Cloud is a beta: turn on **Cloud sessions** in **Settings → Labs** first.
+T3 starts sessions with the Claude Code CLI, but reads replies and changes
+settings through a private Anthropic interface using Claude Code's sign-in.
+Anthropic's terms restrict other apps from using Claude sign-ins this way, and
+it can be changed or blocked without notice, which may affect your account.
+Every Claude account is also checked for cloud access when T3 starts.
+
+When starting a chat, open the machine picker and choose **Claude Cloud**. Each
+configured Claude Code account has its own cloud choice, using that account's
+login and custom config directory. A Claude subscription and cloud-session
+access are required; API keys and third-party model providers do not grant it.
+Run `claude` once in a terminal on that machine first, so Claude Code's
+first-run setup does not block the cloud session from starting.
+
+With Claude Cloud chosen, the model picker lists only Claude Cloud models. The
+first message creates a cloud session with the model, effort level, and Ultracode
+setting chosen in the composer. Claude's replies, commands, and file edits stream back into the
+thread, and follow-ups continue the same session, including after restarting T3.
+Picking another model, effort level, or Ultracode setting before a follow-up switches the cloud
+session to it. Fast mode is not available, because cloud sessions do not accept it.
+Changed files stay in the cloud session's branch; open the session at
+[claude.ai/code](https://claude.ai/code) to review or open a pull request.
+Replies are read with the Claude Code sign-in file on this machine. Where the
+sign-in lives only in the macOS keychain, T3 sends messages and links to the
+session instead of showing replies.
+
+For GitHub-backed sessions, push the branch before sending so Claude can clone
+your changes. To bring a completed session's branch and conversation back to a
+local terminal, run `claude --teleport <session id>` from a clean checkout of
+the repository. Teleport creates a local copy; later local messages do not sync
+back to the cloud session.

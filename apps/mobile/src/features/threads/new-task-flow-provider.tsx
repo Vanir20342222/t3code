@@ -1,3 +1,9 @@
+import {
+  cloudMachineTargets,
+  cloudMachineModelSelection,
+  type CloudMachineControls,
+} from "@t3tools/client-runtime/provider-clients";
+import { resolveProjectProviderInstanceEnabled } from "@t3tools/contracts";
 import { ActiveNewTaskContext } from "../../state/active-new-task";
 import { errorDisplayMessage } from "@t3tools/client-runtime/errors";
 import { msg, useMessages } from "gt-react-native";
@@ -45,6 +51,7 @@ import { projectEnvironment } from "../../state/projects";
 import { useLinkedEnvironments } from "../../state/peerLinks";
 import { useEnvironmentQuery } from "../../state/query";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { serverEnvironment } from "../../state/server";
 import {
   appendComposerDraftAttachments,
   type ComposerDraftInsertion,
@@ -171,6 +178,7 @@ type NewTaskFlowContextValue = {
   readonly linkedEnvironments: ReadonlyMap<EnvironmentId, string>;
   readonly isScratchDraft: boolean;
   readonly modelOptions: ReadonlyArray<ModelOption>;
+  readonly cloudMachines: CloudMachineControls;
   readonly selectedModel: ModelSelection | null;
   readonly selectedModelOption: ModelOption | null;
   readonly selectedProviderStatus: ServerProvider | null;
@@ -233,6 +241,7 @@ export function NewTaskFlowProvider(
 ) {
   const projects = useProjects();
   const messages = useMessages();
+  const warmUpProvider = useAtomCommand(serverEnvironment.warmUpProvider, { reportFailure: false });
   const threads = useThreadShells();
   const { savedConnectionsById } = useSavedRemoteConnections();
   const groupingSettings = useMobileProjectGroupingSettings();
@@ -509,6 +518,49 @@ export function NewTaskFlowProvider(
     updateComposerDraftSettings(selectedProjectDraftKey, { modelSelection: selection });
     setStickyComposerModelSelection(selection);
   };
+  const cloudTargets = cloudMachineTargets(
+    (selectedEnvironmentServerConfig?.providers ?? []).filter(
+      (provider) =>
+        selectedEnvironmentServerConfig &&
+        resolveProjectProviderInstanceEnabled(
+          selectedEnvironmentServerConfig.settings,
+          selectedProject?.id ?? null,
+          provider.instanceId,
+        ),
+    ),
+    messages,
+  );
+  const selectedCloudId = cloudTargets.some(
+    (target) => target.instanceId === selectedModel?.instanceId,
+  )
+    ? (selectedModel?.instanceId ?? null)
+    : null;
+  const cloudMachines: CloudMachineControls = {
+    targets: cloudTargets,
+    selectedInstanceId: selectedCloudId,
+    onSelect: (instanceId) => {
+      if (instanceId !== null && selectedProjectDraft.attachments.length > 0) {
+        Dialog.alert(
+          m(msg("Remove attachments before switching to a cloud machine")),
+          m(msg("Cloud sessions cannot receive local attachments.")),
+        );
+        return;
+      }
+      const selection = cloudMachineModelSelection(
+        selectedEnvironmentServerConfig?.providers ?? [],
+        selectedModel ?? null,
+        instanceId,
+      );
+      if (!selection) return;
+      setSelectedModelKey(`${selection.instanceId}:${selection.model}`);
+      // A cloud workspace takes about half a minute to start; let it boot while the user types.
+      if (instanceId !== null && selectedProject)
+        void warmUpProvider({
+          environmentId: selectedProject.environmentId,
+          input: { instanceId, model: selection.model, cwd: selectedProject.workspaceRoot },
+        });
+    },
+  };
   const setSelectedModelOptions = (options: ReadonlyArray<ProviderOptionSelection> | undefined) => {
     if (!selectedModel || !selectedProjectDraftKey) {
       return;
@@ -609,6 +661,7 @@ export function NewTaskFlowProvider(
   );
   const latestSwitchRef = useRef<object | null>(null);
   const switchEnvironment = async (environmentId: EnvironmentId): Promise<boolean> => {
+    cloudMachines.onSelect(null);
     if (environmentId === selectedEnvironmentId) {
       latestSwitchRef.current = null;
       setSwitchingToEnvironmentId(null);
@@ -868,6 +921,7 @@ export function NewTaskFlowProvider(
     selectedEnvironmentId,
     selectedProjectKey,
     selectedModelKey,
+    cloudMachines,
     workspaceMode,
     isGitRepo,
     isGitRepoKnown: knownIsGitRepo !== null,

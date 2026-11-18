@@ -33,6 +33,73 @@ function settingsWith(overrides: Partial<ServerSettings>): ServerSettings {
 }
 
 describe("deriveProviderInstanceConfigMap", () => {
+  it("derives cloud machines from each account only while the Labs beta is on", () => {
+    const settings = settingsWith({
+      cloudSessionsEnabled: true,
+      providerInstances: {
+        [ProviderInstanceId.make("work")]: {
+          driver: ProviderDriverKind.make("codex"),
+          displayName: "Work",
+          environment: [{ name: "CODEX_HOME", value: "/accounts/work", sensitive: false }],
+          config: {
+            binaryPath: "/bin/codex-work",
+            shadowHomePath: "/accounts/shadow",
+            cloudEnvironment: "env-work",
+          },
+        },
+        [ProviderInstanceId.make("personal")]: {
+          driver: ProviderDriverKind.make("claudeAgent"),
+          enabled: false,
+        },
+      },
+    });
+    const merged = deriveProviderInstanceConfigMap(settings);
+    expect(merged[ProviderInstanceId.make("cloud_work")]).toMatchObject({
+      driver: "codexCloud",
+      displayName: "Codex Cloud · Work",
+      enabled: true,
+      environment: settings.providerInstances[ProviderInstanceId.make("work")]?.environment,
+      config: {
+        binaryPath: "/bin/codex-work",
+        homePath: "/accounts/shadow",
+        environment: "env-work",
+      },
+    });
+    expect(merged[ProviderInstanceId.make("cloud_personal")]?.enabled).toBe(false);
+    const edited = deriveProviderInstanceConfigMap(
+      settingsWith({
+        cloudSessionsEnabled: true,
+        providerInstances: {
+          ...settings.providerInstances,
+          [ProviderInstanceId.make("cloud_work")]: {
+            driver: ProviderDriverKind.make("codexCloud"),
+            enabled: false,
+            config: { homePath: "", environment: "env-edited" },
+          },
+        },
+      }),
+    );
+    expect(edited[ProviderInstanceId.make("cloud_work")]).toMatchObject({
+      enabled: false,
+      displayName: "Codex Cloud · Work",
+      config: {
+        homePath: "/accounts/shadow",
+        sourceInstanceId: "work",
+        environment: "env-edited",
+      },
+    });
+    expect(
+      deriveProviderInstanceConfigMap({ ...settings, cloudSessionsEnabled: false })[
+        ProviderInstanceId.make("cloud_work")
+      ],
+    ).toBeUndefined();
+    expect(
+      deriveProviderInstanceConfigMap(settingsWith({ providerInstances: {} }))[
+        ProviderInstanceId.make("cloud_work")
+      ],
+    ).toBeUndefined();
+  });
+
   it("turns a machine-disabled instance on when a project enables it", () => {
     const settings = settingsWith({
       providerInstances: {

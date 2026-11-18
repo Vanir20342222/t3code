@@ -24,6 +24,7 @@ export function LabsSettingsPanel() {
         {/* Clerk is only mounted when this build has T3 Connect. */}
         {hasCloudPublicConfig() ? <GuestLinksRowWithSignIn /> : <GuestLinksRow />}
         <LinkedEnvironmentsRow />
+        <CloudSessionsRow />
         <PromptSuggestionsRow />
         <SimlockHostsRow />
         <FastWorktreeCheckoutRow />
@@ -180,6 +181,31 @@ function LinkedEnvironmentsRow() {
             updateSettings({ linkedEnvironmentsEnabled: Boolean(checked) })
           }
           aria-label={gt("Linked environments")}
+        />
+      }
+    />
+  );
+}
+
+function CloudSessionsRow() {
+  const searchableSetting = useSearchableSetting();
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const gt = useGT();
+  return (
+    <SettingsRow
+      serverScoped
+      {...searchableSetting("cloud-sessions-beta")}
+      settingKeys={["cloudSessionsEnabled"]}
+      description={gt(
+        "Run threads on Claude Cloud and Codex Cloud from Run on. T3 reaches them through private Anthropic and OpenAI interfaces with your Claude Code and Codex sign-ins. Neither company supports this for other apps, Anthropic's terms restrict it, and either can change or block it without notice, which may affect your account. Each account is also checked for cloud access when T3 starts, which can make startup slower.",
+      )}
+      control={
+        <ScopedSwitch
+          settingKeys={["cloudSessionsEnabled"]}
+          checked={settings.cloudSessionsEnabled}
+          onCheckedChange={(checked) => updateSettings({ cloudSessionsEnabled: Boolean(checked) })}
+          aria-label={gt("Cloud sessions")}
         />
       }
     />

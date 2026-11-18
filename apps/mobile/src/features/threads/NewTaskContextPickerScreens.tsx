@@ -210,7 +210,9 @@ export function NewTaskEnvironmentPickerRouteScreen() {
               <EnvironmentPickerRow
                 key={String(environment.environmentId)}
                 environmentId={environment.environmentId}
-                isLast={index === flow.environments.length - 1}
+                isLast={
+                  index === flow.environments.length - 1 && flow.cloudMachines.targets.length === 0
+                }
                 disabled={flow.switchingToEnvironmentId !== null}
                 onPress={() => {
                   void Haptics.selectionAsync();
@@ -218,8 +220,31 @@ export function NewTaskEnvironmentPickerRouteScreen() {
                     if (switched) navigation.goBack();
                   });
                 }}
-                selected={flow.selectedEnvironmentId === environment.environmentId}
+                selected={
+                  flow.cloudMachines.selectedInstanceId === null &&
+                  flow.selectedEnvironmentId === environment.environmentId
+                }
                 title={environment.environmentLabel}
+              />
+            ))}
+            {flow.cloudMachines.targets.map((target, index) => (
+              <SelectionRow
+                key={target.instanceId}
+                title={target.label}
+                subtitle={target.disabledReason ?? undefined}
+                icon="cloud"
+                selected={flow.cloudMachines.selectedInstanceId === target.instanceId}
+                disabled={
+                  target.disabledReason !== null ||
+                  flow.switchingToEnvironmentId !== null ||
+                  flow.submitting
+                }
+                isLast={index === flow.cloudMachines.targets.length - 1}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  flow.cloudMachines.onSelect(target.instanceId);
+                  navigation.goBack();
+                }}
               />
             ))}
           </PickerSurface>

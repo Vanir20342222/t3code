@@ -1,3 +1,4 @@
+import type { CloudMachineControls } from "@t3tools/client-runtime/provider-clients";
 import type {
   EditorId,
   EnvironmentId,
@@ -71,6 +72,7 @@ interface ThreadDetailsPanelProps extends Pick<
   workspaceMutationId: string | null;
   isGitRepo: boolean;
   envLocked: boolean;
+  cloudMachines?: CloudMachineControls | undefined;
   availableEnvironments: readonly EnvironmentOption[];
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
@@ -195,6 +197,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                         layout="panel"
                         panelSection="workspace"
                         availableEnvironments={props.availableEnvironments}
+                        cloudMachines={props.cloudMachines}
                         {...(props.onEnvironmentChange
                           ? { onEnvironmentChange: props.onEnvironmentChange }
                           : {})}

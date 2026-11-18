@@ -706,6 +706,13 @@ export function makeProviderSettingsSchema<const Fields extends Schema.Struct.Fi
 
 export const CodexSettings = makeProviderSettingsSchema(
   {
+    cloudEnvironment: Schema.optionalKey(TrimmedString).pipe(
+      Schema.annotateKey({
+        title: "Codex Cloud environment",
+        description:
+          "Optional managed environment configuration ID. Leave empty to use Codex's default cloud environment.",
+      }),
+    ),
     setupMode: Schema.optionalKey(Schema.Literals(["managed", "existing"])).pipe(
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
@@ -756,10 +763,71 @@ export const CodexSettings = makeProviderSettingsSchema(
     ),
   },
   {
-    order: ["binaryPath", "homePath", "shadowHomePath", "launchArgs"],
+    order: ["binaryPath", "homePath", "shadowHomePath", "launchArgs", "cloudEnvironment"],
   },
 );
 export type CodexSettings = typeof CodexSettings.Type;
+
+export const CodexCloudSettings = makeProviderSettingsSchema(
+  {
+    sourceInstanceId: Schema.optionalKey(ProviderInstanceId).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    launchArgs: Schema.optionalKey(TrimmedString).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    homePath: Schema.optionalKey(TrimmedString).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    sourceSetupMode: Schema.optionalKey(Schema.Literals(["managed", "existing"])).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    binaryPath: makeBinaryPathSetting("codex").pipe(
+      Schema.annotateKey({
+        title: "Binary path",
+        description: "Path to the Codex binary used by this instance.",
+        providerSettingsForm: { placeholder: "codex", clearWhenEmpty: "omit" },
+      }),
+    ),
+    environment: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Cloud environment configuration",
+        description:
+          "Optional managed environment configuration ID. Leave empty to use Codex's default cloud environment.",
+        providerSettingsForm: { clearWhenEmpty: "omit" },
+      }),
+    ),
+  },
+  { order: ["binaryPath", "environment"] },
+);
+export type CodexCloudSettings = typeof CodexCloudSettings.Type;
+
+/** Sessions run in Anthropic's cloud sandboxes; the CLI rides the user's existing Claude sign-in. */
+export const ClaudeCloudSettings = makeProviderSettingsSchema(
+  {
+    homePath: Schema.optionalKey(TrimmedString).pipe(
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    enabled: Schema.Boolean.pipe(
+      Schema.withDecodingDefault(Effect.succeed(true)),
+      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
+    ),
+    binaryPath: makeBinaryPathSetting("claude").pipe(
+      Schema.annotateKey({
+        title: "Binary path",
+        description: "Path to the Claude Code binary used by this instance.",
+        providerSettingsForm: { placeholder: "claude", clearWhenEmpty: "omit" },
+      }),
+    ),
+  },
+  { order: ["binaryPath"] },
+);
+export type ClaudeCloudSettings = typeof ClaudeCloudSettings.Type;
 
 const CLAUDE_AUTO_COMPACT_WINDOW_PATTERN = /^(?:|[1-9]\d{5}|1000000)$/;
 
@@ -1482,6 +1550,8 @@ export const ServerSettings = Schema.Struct({
    * and tasks on another machine; tasks already running there finish.
    */
   linkedEnvironmentsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Beta: Claude Cloud and Codex Cloud hosts. Off, no cloud provider is created or checked. */
+  cloudSessionsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Beta: Claude and Codex predict the next prompt after completed turns. Codex follows a change at once; open Claude threads after they restart. */
   promptSuggestionsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   sidebarAutoSettleKeepPullRequests: Schema.Boolean.pipe(
@@ -1648,6 +1718,10 @@ export const resolveProjectProviderInstanceEnabled = (
   projectId: ProjectId | null,
   instanceId: ProviderInstanceId,
 ): boolean => {
+  const sourceId = cloudSourceInstanceId(instanceId, [
+    ...DEFAULT_ENABLED_DEFAULT_INSTANCES,
+    ...(Object.keys(settings.providerInstances) as ProviderInstanceId[]),
+  ]);
   const override =
     projectId === null
       ? undefined
@@ -1656,10 +1730,34 @@ export const resolveProjectProviderInstanceEnabled = (
   const instanceConfig = Object.hasOwn(settings.providerInstances, instanceId)
     ? settings.providerInstances[instanceId]
     : undefined;
+  // A cloud entry follows its account unless it is switched off itself.
+  if (sourceId !== null) {
+    return (
+      (instanceConfig === undefined || resolveProviderInstanceEnabled(instanceConfig)) &&
+      resolveProjectProviderInstanceEnabled(settings, projectId, sourceId)
+    );
+  }
   return instanceConfig !== undefined
     ? resolveProviderInstanceEnabled(instanceConfig)
     : isUnconfiguredDefaultInstanceEnabled(instanceId);
 };
+
+export const cloudProviderInstanceId = (instanceId: ProviderInstanceId): ProviderInstanceId => {
+  let hash = 2166136261;
+  for (const char of instanceId) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  const suffix = (hash >>> 0).toString(16).padStart(8, "0");
+  return ProviderInstanceId.make(
+    instanceId.length <= 58 ? `cloud_${instanceId}` : `cloud_${instanceId.slice(0, 49)}_${suffix}`,
+  );
+};
+
+export const cloudSourceInstanceId = (
+  instanceId: ProviderInstanceId,
+  candidates: ReadonlyArray<ProviderInstanceId>,
+): ProviderInstanceId | null =>
+  instanceId.startsWith("cloud_")
+    ? (candidates.find((candidate) => cloudProviderInstanceId(candidate) === instanceId) ?? null)
+    : null;
 
 /** The text generator a selection names, if any; it takes precedence over a provider instance. */
 export const textGeneratorForSelection = (
@@ -1917,6 +2015,7 @@ export const ServerSettingsPatch = Schema.Struct({
   hideTaggedThreads: Schema.optionalKey(Schema.Boolean),
   guestSharingEnabled: Schema.optionalKey(Schema.Boolean),
   linkedEnvironmentsEnabled: Schema.optionalKey(Schema.Boolean),
+  cloudSessionsEnabled: Schema.optionalKey(Schema.Boolean),
   promptSuggestionsEnabled: Schema.optionalKey(Schema.Boolean),
   backgroundActivity: Schema.optionalKey(
     Schema.Struct({

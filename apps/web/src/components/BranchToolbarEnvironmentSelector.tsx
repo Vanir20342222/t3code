@@ -8,6 +8,10 @@ import type { EnvironmentId } from "@t3tools/contracts";
 import { PlusIcon, ScaleIcon } from "lucide-react";
 import { memo } from "react";
 import { T, useGT } from "gt-react";
+import type {
+  CloudMachineControls,
+  CloudMachineTarget,
+} from "@t3tools/client-runtime/provider-clients";
 
 import { ADD_TO_MACHINE_LABEL_CLASS, type EnvironmentOption } from "./BranchToolbar.logic";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
@@ -22,6 +26,7 @@ import {
 } from "./ui/select";
 
 interface BranchToolbarEnvironmentSelectorProps {
+  cloudMachines?: CloudMachineControls | undefined;
   autoEnvironmentLabel?: string | undefined;
   onAutoEnvironment?: (() => void) | undefined;
   envLocked: boolean;
@@ -34,9 +39,33 @@ interface BranchToolbarEnvironmentSelectorProps {
 // Action values cannot collide with server-minted environment IDs.
 const AUTO_VALUE = "action:auto";
 const ADD_MACHINE_VALUE = "action:add-machine";
+
+/** One line like the machine rows; an unusable target gives its reason on hover. */
+export function CloudMachineRow({ target }: { readonly target: CloudMachineTarget }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-1.5">
+      <EnvironmentMachineIcon kind="cloud" className="size-3 shrink-0" />
+      <span className="min-w-0 truncate">{target.label}</span>
+      {target.disabledReason ? (
+        <Tooltip>
+          {/* The disabled row ignores the pointer; this label takes it back for the reason. */}
+          <TooltipTrigger
+            render={
+              <span className="pointer-events-auto ms-auto shrink-0 ps-3 text-muted-foreground text-xs" />
+            }
+          >
+            <T>Unavailable</T>
+          </TooltipTrigger>
+          <TooltipPopup side="top">{target.disabledReason}</TooltipPopup>
+        </Tooltip>
+      ) : null}
+    </span>
+  );
+}
 const environmentValue = (id: EnvironmentId) => `env:${id}`;
 
 export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvironmentSelector({
+  cloudMachines,
   autoEnvironmentLabel,
   onAutoEnvironment,
   envLocked,
@@ -53,6 +82,9 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
   );
   const activeEnvironment =
     availableEnvironments.find((env) => env.environmentId === environmentId) ?? null;
+  const activeCloud = cloudMachines?.targets.find(
+    (target) => target.instanceId === cloudMachines.selectedInstanceId,
+  );
 
   const environmentItems = [
     ...(onAutoEnvironment
@@ -62,6 +94,10 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
       value: environmentValue(env.environmentId),
       label: env.label,
     })),
+    ...(cloudMachines?.targets.map((target) => ({
+      value: `cloud:${target.instanceId}`,
+      label: target.label,
+    })) ?? []),
     ...(onAddToMachine ? [{ value: ADD_MACHINE_VALUE, label: gt("Add to another machine") }] : []),
   ];
 
@@ -74,16 +110,20 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
         data-composer-context-control
       >
         <EnvironmentMachineIcon
-          kind={activeEnvironment?.machine ?? "server"}
+          kind={activeCloud ? "cloud" : (activeEnvironment?.machine ?? "server")}
           className="size-3 shrink-0"
         />
-        <ComposerContextLabel>{activeEnvironment?.label ?? gt("Run on")}</ComposerContextLabel>
+        <ComposerContextLabel>
+          {activeCloud?.label ?? activeEnvironment?.label ?? gt("Run on")}
+        </ComposerContextLabel>
       </span>
     );
     return (
       <Tooltip>
         <TooltipTrigger render={lockedRow} />
-        <TooltipPopup>{activeEnvironment?.label ?? gt("Run on")}</TooltipPopup>
+        <TooltipPopup>
+          {activeCloud?.label ?? activeEnvironment?.label ?? gt("Run on")}
+        </TooltipPopup>
       </Tooltip>
     );
   }
@@ -91,13 +131,26 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
   return (
     <Select
       modal={false}
-      value={autoEnvironmentLabel ? AUTO_VALUE : environmentValue(environmentId)}
+      value={
+        activeCloud
+          ? `cloud:${activeCloud.instanceId}`
+          : autoEnvironmentLabel
+            ? AUTO_VALUE
+            : environmentValue(environmentId)
+      }
       onValueChange={(value) => {
         if (value === ADD_MACHINE_VALUE) {
           onAddToMachine?.();
         } else if (value === AUTO_VALUE) {
+          cloudMachines?.onSelect(null);
           onAutoEnvironment?.();
+        } else if (value?.startsWith("cloud:")) {
+          const target = cloudMachines?.targets.find(
+            (target) => `cloud:${target.instanceId}` === value,
+          );
+          if (target && !target.disabledReason) cloudMachines?.onSelect(target.instanceId);
         } else if (value?.startsWith("env:")) {
+          cloudMachines?.onSelect(null);
           onEnvironmentChange?.(value.slice(4) as EnvironmentId);
         }
       }}
@@ -119,7 +172,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
             <ScaleIcon className="size-3 shrink-0" aria-hidden="true" />
           ) : (
             <EnvironmentMachineIcon
-              kind={activeEnvironment?.machine ?? "server"}
+              kind={activeCloud ? "cloud" : (activeEnvironment?.machine ?? "server")}
               className="size-3 shrink-0"
             />
           )}
@@ -128,7 +181,7 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
           </ComposerContextLabel>
         </TooltipTrigger>
         <TooltipPopup>
-          {autoEnvironmentLabel ?? activeEnvironment?.label ?? gt("Run on")}
+          {activeCloud?.label ?? autoEnvironmentLabel ?? activeEnvironment?.label ?? gt("Run on")}
           {shortcutLabel ? ` · ${shortcutLabel}` : null}
         </TooltipPopup>
       </Tooltip>
@@ -160,6 +213,15 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
                 <EnvironmentMachineIcon kind={env.machine} className="size-3" />
                 {env.label}
               </span>
+            </SelectItem>
+          ))}
+          {cloudMachines?.targets.map((target) => (
+            <SelectItem
+              key={target.instanceId}
+              value={`cloud:${target.instanceId}`}
+              disabled={target.disabledReason !== null}
+            >
+              <CloudMachineRow target={target} />
             </SelectItem>
           ))}
           {onAddToMachine ? (

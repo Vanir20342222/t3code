@@ -7,7 +7,12 @@ import {
   type ProviderInstanceConfig,
   type ProviderInstanceConfigMap,
   ServerSettings,
+  CodexSettings,
+  ClaudeSettings,
+  cloudProviderInstanceId,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 import * as NodeUtil from "node:util";
 
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -52,6 +57,9 @@ type ProviderInstanceRegistryHydrationEnv =
   // Adapter ids read which subagent threads predate short ids.
   | SqlClient.SqlClient;
 
+const decodeCloudSourceCodex = Schema.decodeOption(CodexSettings);
+const decodeCloudSourceClaude = Schema.decodeOption(ClaudeSettings);
+
 export const deriveProviderInstanceConfigMap = (
   settings: ServerSettings,
 ): ProviderInstanceConfigMap => {
@@ -83,6 +91,63 @@ export const deriveProviderInstanceConfigMap = (
     }
   }
 
+  // Off, cloud hosts are neither created nor checked, which keeps startup free of their probes.
+  if (!settings.cloudSessionsEnabled) {
+    for (const [id, instance] of Object.entries(merged))
+      if (instance.driver === "codexCloud" || instance.driver === "claudeCloud") delete merged[id];
+    return merged as ProviderInstanceConfigMap;
+  }
+  for (const [id, source] of Object.entries(merged)) {
+    if (source.driver !== "codex" && source.driver !== "claudeAgent") continue;
+    const cloudId = cloudProviderInstanceId(ProviderInstanceId.make(id));
+    const codexConfig =
+      source.driver === "codex"
+        ? Option.getOrNull(decodeCloudSourceCodex(source.config ?? {}))
+        : null;
+    const claudeConfig =
+      source.driver === "claudeAgent"
+        ? Option.getOrNull(decodeCloudSourceClaude(source.config ?? {}))
+        : null;
+    const config = codexConfig ?? claudeConfig;
+    if (config === null) continue;
+    const derivedConfig: Record<string, unknown> = {
+      binaryPath: config.binaryPath,
+      homePath: codexConfig?.shadowHomePath || config.homePath,
+      ...(codexConfig
+        ? {
+            sourceInstanceId: id,
+            launchArgs: codexConfig.launchArgs,
+            sourceSetupMode: codexConfig.setupMode ?? "existing",
+            environment: codexConfig.cloudEnvironment ?? "",
+          }
+        : {}),
+    };
+    const derived: ProviderInstanceConfig = {
+      driver: ProviderDriverKind.make(codexConfig ? "codexCloud" : "claudeCloud"),
+      displayName: `${codexConfig ? "Codex" : "Claude"} Cloud${source.displayName ? ` · ${source.displayName}` : ""}`,
+      enabled: resolveProviderInstanceEnabled(source),
+      ...(source.environment ? { environment: source.environment } : {}),
+      ...(source.accentColor ? { accentColor: source.accentColor } : {}),
+      config: derivedConfig,
+    };
+    // Settings saved for the cloud entry refine what it inherits; an empty field keeps the account's.
+    const saved = merged[cloudId];
+    merged[cloudId] =
+      saved === undefined
+        ? derived
+        : {
+            ...derived,
+            ...saved,
+            config: {
+              ...derivedConfig,
+              ...Object.fromEntries(
+                Object.entries(
+                  typeof saved.config === "object" && saved.config !== null ? saved.config : {},
+                ).filter(([, value]) => value !== undefined && value !== ""),
+              ),
+            },
+          };
+  }
   return merged as ProviderInstanceConfigMap;
 };
 

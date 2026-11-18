@@ -1,6 +1,12 @@
 import { m } from "../i18n/messages";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { useGT, useMessages } from "gt-react";
+import { msg, useGT, useMessages } from "gt-react";
+import {
+  cloudMachineTargets,
+  cloudMachineModelSelection,
+  type CloudMachineControls,
+} from "@t3tools/client-runtime/provider-clients";
+import { resolveProjectProviderInstanceEnabled } from "@t3tools/contracts";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
 import { workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
@@ -490,6 +496,7 @@ export default function ChatView(props: ChatViewProps) {
   const interruptThreadTurn = useOrchestrationCommand(threadEnvironment.interruptTurn, {
     reportFailure: false,
   });
+  const warmUpProvider = useAtomCommand(serverEnvironment.warmUpProvider, { reportFailure: false });
   const loadEarlierThreadHistory = useAtomCommand(threadEnvironment.loadEarlierHistory, {
     label: "load earlier thread history",
     reportFailure: false,
@@ -1238,8 +1245,27 @@ export default function ChatView(props: ChatViewProps) {
     activeProject,
     activeProjectIsScratch && draftId !== null,
   );
-  const hasMultipleEnvironments = logicalProjectEnvironments.length > 1;
-  const canAutoBalanceEnvironments = hasMultipleEnvironments && !activeProjectIsScratch;
+  const cloudTargets = cloudMachineTargets(
+    (providersByEnvironment.get(environmentId) ?? []).filter((provider) =>
+      resolveProjectProviderInstanceEnabled(
+        settings,
+        activeProject?.id ?? null,
+        provider.instanceId,
+      ),
+    ),
+    messages,
+  );
+  const selectedCloudInstanceId = cloudTargets.some(
+    (target) =>
+      target.instanceId === (composerActiveProvider ?? activeThread?.modelSelection.instanceId),
+  )
+    ? (composerActiveProvider ?? activeThread?.modelSelection.instanceId ?? null)
+    : null;
+  const hasMultipleEnvironments = logicalProjectEnvironments.length > 1 || cloudTargets.length > 0;
+  const canAutoBalanceEnvironments =
+    logicalProjectEnvironments.length > 1 &&
+    !activeProjectIsScratch &&
+    selectedCloudInstanceId === null;
   const activeEnvironmentOption =
     logicalProjectEnvironments.find(
       (environment) => environment.environmentId === activeThread?.environmentId,
@@ -2800,12 +2826,30 @@ export default function ChatView(props: ChatViewProps) {
       "composer.cycleHost": ({ event }) => {
         if (!canChangeEnvironment) return false;
         if (event.repeat) return;
+        const selectableClouds = cloudTargets.filter((target) => target.disabledReason === null);
+        if (selectedCloudInstanceId !== null) {
+          const cloudIndex = selectableClouds.findIndex(
+            (target) => target.instanceId === selectedCloudInstanceId,
+          );
+          const nextCloud = selectableClouds[cloudIndex + 1];
+          cloudMachines.onSelect(nextCloud?.instanceId ?? null);
+          if (!nextCloud)
+            onEnvironmentChangeStable(
+              logicalProjectEnvironments[0]?.environmentId ?? environmentId,
+            );
+          return;
+        }
         const currentId = readPendingEnvironmentChange()?.environmentId ?? environmentId;
         const index = logicalProjectEnvironments.findIndex(
           (env) => env.environmentId === currentId,
         );
-        const next = logicalProjectEnvironments[(index + 1) % logicalProjectEnvironments.length];
-        if (next) onEnvironmentChangeStable(next.environmentId);
+        const nextCloud = selectableClouds[0];
+        if (index === logicalProjectEnvironments.length - 1 && nextCloud)
+          cloudMachines.onSelect(nextCloud.instanceId);
+        else {
+          const next = logicalProjectEnvironments[(index + 1) % logicalProjectEnvironments.length];
+          if (next) onEnvironmentChangeStable(next.environmentId);
+        }
       },
       "thread.steerQueuedMessage": ({ event }) =>
         routeKind !== "draft" && queuedRunsControlRef.current?.steerNext(event.repeat) === true,
@@ -2934,6 +2978,44 @@ export default function ChatView(props: ChatViewProps) {
     setPendingServerThreadStartFromOriginByThreadId,
     scheduleComposerFocus: scheduleComposerFocusStable,
   });
+  const cloudMachines: CloudMachineControls = {
+    targets: cloudTargets,
+    selectedInstanceId: selectedCloudInstanceId,
+    onSelect: (instanceId) => {
+      if (envLocked || !draftId || sendInFlightRef.current) return;
+      const selection = cloudMachineModelSelection(
+        providerStatuses,
+        composerRef.current?.getSendContext().selectedModelSelection ?? null,
+        instanceId,
+      );
+      if (!selection) return;
+      if (instanceId !== null) {
+        if (composerHasAttachments) {
+          toastManager.add({
+            type: "warning",
+            title: m(msg("Remove attachments before switching to a cloud machine")),
+          });
+          return;
+        }
+        setMultipleModelSelectionsStable(null);
+        setDraftThreadContext(draftId, {
+          environmentSelection: "manual",
+          loadBalancedEnvironmentId: null,
+        });
+      }
+      onProviderModelSelectStable(selection.instanceId, selection.model);
+      // A cloud workspace takes about half a minute to start; let it boot while the user types.
+      if (instanceId !== null)
+        void warmUpProvider({
+          environmentId,
+          input: {
+            instanceId,
+            model: selection.model,
+            ...(activeProject ? { cwd: activeProject.workspaceRoot } : {}),
+          },
+        });
+    },
+  };
   const { onResume, isResuming } = useComposerResume({
     environmentId,
     routeThreadKey,
@@ -3870,6 +3952,7 @@ export default function ChatView(props: ChatViewProps) {
                                       : undefined
                                   }
                                   availableEnvironments={logicalProjectEnvironments}
+                                  cloudMachines={cloudMachines}
                                   {...(isServerThread
                                     ? {}
                                     : {
@@ -3959,6 +4042,7 @@ export default function ChatView(props: ChatViewProps) {
                   isGitRepo={isGitRepo}
                   envLocked={envLocked}
                   availableEnvironments={logicalProjectEnvironments}
+                  cloudMachines={cloudMachines}
                   autoEnvironmentLabel={autoEnvironmentLabel}
                   onAutoEnvironment={
                     draftId &&

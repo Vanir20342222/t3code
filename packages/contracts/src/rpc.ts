@@ -469,6 +469,7 @@ export const WS_METHODS = {
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
+  providerWarmUp: "provider.warmUp",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -745,6 +746,17 @@ const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeReset
   payload: ProviderConsumeResetCreditInput,
   success: ProviderConsumeResetCreditResult,
   error: Schema.Union([ProviderSetupError, UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+/** Starts slow remote setup, such as a cloud workspace, while the user is still typing. */
+const WsProviderWarmUpRpc = Rpc.make(WS_METHODS.providerWarmUp, {
+  payload: Schema.Struct({
+    instanceId: ProviderInstanceId,
+    model: Schema.optional(TrimmedNonEmptyString),
+    /** The project's folder, so the cloud workspace matches its repository. */
+    cwd: Schema.optional(TrimmedNonEmptyString),
+  }),
+  error: EnvironmentAuthorizationError,
 });
 
 const WsProviderAuthStartRpc = Rpc.make(WS_METHODS.providerAuthStart, {
@@ -2265,6 +2277,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
+  WsProviderWarmUpRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsChatGptReconnectProfileRpc,

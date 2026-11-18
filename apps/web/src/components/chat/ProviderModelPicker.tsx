@@ -28,6 +28,7 @@ import { ChatGptSharingControl } from "./ChatGptSharingControl";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { ModelEsque, getDisplayModelName, getTriggerDisplayModelName } from "./providerIconUtils";
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
+import { modelPickerInstancesForHost } from "@t3tools/client-runtime/provider-clients";
 import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { takeOpenTarget, useComposerMenuProps } from "./composerEventScope";
 import { shortcutLabelForCommand } from "../../keybindings";
@@ -307,7 +308,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         : {})}
       lockedProvider={props.lockedProvider}
       lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
-      instanceEntries={props.instanceEntries}
+      instanceEntries={modelPickerInstancesForHost(
+        props.instanceEntries,
+        props.activeInstanceId,
+        (entry) => ({ instanceId: entry.instanceId, driver: entry.driverKind }),
+      )}
       {...(props.keybindings ? { keybindings: props.keybindings } : {})}
       modelOptionsByInstance={props.modelOptionsByInstance}
       terminalOpen={props.terminalOpen ?? false}

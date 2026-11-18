@@ -419,7 +419,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       activeEntry,
       modelOptionsByInstance.get(props.activeInstanceId) ?? [],
     );
-  const [selectedInstanceId, setSelectedInstanceId] = useState<ProviderInstanceId | "favorites">(
+  const [chosenInstanceId, setSelectedInstanceId] = useState<ProviderInstanceId | "favorites">(
     () => {
       if (
         props.lockedProvider !== null ||
@@ -447,6 +447,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       return hasPickableFavorite ? "favorites" : props.activeInstanceId;
     },
   );
+  // Switching to a cloud host drops other providers from the rail, so a tab chosen before falls back.
+  const selectedInstanceId =
+    chosenInstanceId === "favorites" ||
+    instanceEntries.some((entry) => entry.instanceId === chosenInstanceId)
+      ? chosenInstanceId
+      : props.activeInstanceId;
   const { scanning: workspaceModelsScanning } = useProviderWorkspaceSnapshotRefresh({
     environmentId: props.environmentId,
     gitCwd: props.workspaceCwd ?? null,

@@ -17,6 +17,7 @@ import {
   OpenRouterIcon,
 } from "../Icons";
 
+import { providerBrandDriverKind } from "@t3tools/client-runtime/provider-clients";
 import { cn } from "~/lib/utils";
 import { providerClients } from "../settings/providerDriverMeta";
 import { ProviderPackageIcon } from "./ProviderPackageIcon";
@@ -53,16 +54,18 @@ const BUNDLED_LOGO_COLOR_BY_PROVIDER: Partial<Record<ProviderDriverKind, string>
 };
 
 /** The logo's own color, or null for logos that swap between black and white per theme. */
-export function providerLogoColor(driverKind: ProviderDriverKind): string | null {
+export function providerLogoColor(instanceDriverKind: ProviderDriverKind): string | null {
+  const driverKind = providerBrandDriverKind(instanceDriverKind);
   const fill = providerClients.get(driverKind)?.icon?.fill;
   if (fill) return fill.light === fill.dark ? fill.light : null;
   return BUNDLED_LOGO_COLOR_BY_PROVIDER[driverKind] ?? null;
 }
 
-export function providerTextColor(driverKind: ProviderDriverKind): {
+export function providerTextColor(instanceDriverKind: ProviderDriverKind): {
   readonly className?: string;
   readonly style?: CSSProperties;
 } {
+  const driverKind = providerBrandDriverKind(instanceDriverKind);
   const icon = providerClients.get(driverKind)?.icon;
   if (icon) {
     return {
@@ -100,8 +103,9 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   badgeClassName?: string;
   indicatorBackground?: string;
 }) {
-  const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
-  const packageIcon = providerClients.get(props.driverKind)?.icon;
+  const brandDriverKind = providerBrandDriverKind(props.driverKind);
+  const Icon = PROVIDER_ICON_BY_PROVIDER[brandDriverKind] ?? null;
+  const packageIcon = providerClients.get(brandDriverKind)?.icon;
   const indicatorBackground = props.indicatorBackground ?? "var(--card)";
   const accentColor = normalizeProviderAccentColor(props.accentColor);
   const accentStyle = accentColor

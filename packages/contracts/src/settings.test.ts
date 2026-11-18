@@ -19,6 +19,8 @@ import {
   requiredScopesForProjectMutation,
   resolveIdleCompaction,
   resolveProjectProviderInstanceEnabled,
+  cloudProviderInstanceId,
+  cloudSourceInstanceId,
   resolveProviderInstanceEnabled,
   ServerSettings,
   ServerSettingsPatch,
@@ -493,6 +495,51 @@ describe("resolveProjectProviderInstanceEnabled", () => {
       },
     };
     expect(resolveProjectProviderInstanceEnabled(settings, projectId, instanceId)).toBe(false);
+    expect(
+      resolveProjectProviderInstanceEnabled(
+        settings,
+        projectId,
+        cloudProviderInstanceId(instanceId),
+      ),
+    ).toBe(false);
+    expect(
+      resolveProjectProviderInstanceEnabled(settings, null, cloudProviderInstanceId(instanceId)),
+    ).toBe(true);
+    const withCloudEntry = (enabled: boolean): ServerSettings => ({
+      ...settings,
+      providerInstances: {
+        ...settings.providerInstances,
+        [cloudProviderInstanceId(instanceId)]: {
+          driver: ProviderDriverKind.make("codexCloud"),
+          enabled,
+        },
+      },
+    });
+    expect(
+      resolveProjectProviderInstanceEnabled(
+        withCloudEntry(true),
+        projectId,
+        cloudProviderInstanceId(instanceId),
+      ),
+    ).toBe(false);
+    expect(
+      resolveProjectProviderInstanceEnabled(
+        withCloudEntry(false),
+        null,
+        cloudProviderInstanceId(instanceId),
+      ),
+    ).toBe(false);
+    const longId = ProviderInstanceId.make(`account_${"a".repeat(56)}`);
+    expect(
+      resolveProjectProviderInstanceEnabled(
+        DEFAULT_SERVER_SETTINGS,
+        null,
+        cloudProviderInstanceId(ProviderInstanceId.make("claudeAgent")),
+      ),
+    ).toBe(true);
+    const cloudId = cloudProviderInstanceId(longId);
+    expect(cloudId.length).toBeLessThanOrEqual(64);
+    expect(cloudSourceInstanceId(cloudId, [instanceId, longId])).toBe(longId);
   });
 });
 

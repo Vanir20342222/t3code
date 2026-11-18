@@ -1658,6 +1658,10 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input]),
       },
     }),
+    warmUpProvider: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:warm-up-provider",
+      tag: WS_METHODS.providerWarmUp,
+    }),
     refreshProviders: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:refresh-providers",
       tag: WS_METHODS.serverRefreshProviders,

@@ -2618,6 +2618,13 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.serverUpdateProvider]: (input) =>
           providerMaintenanceRunner.updateProvider(input),
+        [WS_METHODS.providerWarmUp]:
+          /* Request instrumentation already owns the span; keep this helper in that context. */
+          Effect.fnUntraced(function* (input) {
+            const instance = yield* providerInstances.getInstance(input.instanceId);
+            if (instance?.enabled && instance.warmUp)
+              yield* instance.warmUp({ model: input.model, cwd: input.cwd });
+          }),
         [WS_METHODS.providerConsumeResetCredit]:
           /* Request instrumentation already owns the span; keep this helper in that context. */
           Effect.fnUntraced(function* (input) {

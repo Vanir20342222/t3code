@@ -55,6 +55,15 @@ export function SettingsLabsRouteScreen() {
           )}
         />
         <MachineBetaSection
+          title={gt("Cloud sessions")}
+          icon="cloud"
+          capability="cloudSessions"
+          setting="cloudSessionsEnabled"
+          description={gt(
+            "Run threads on Claude Cloud and Codex Cloud from Run on. T3 reaches them through private Anthropic and OpenAI interfaces with your Claude Code and Codex sign-ins. Neither company supports this for other apps, Anthropic's terms restrict it, and either can change or block it without notice, which may affect your account. Each account is also checked for cloud access when T3 starts, which can make startup slower.",
+          )}
+        />
+        <MachineBetaSection
           title={gt("Fast worktree checkout")}
           icon="bolt.circle"
           capability="fastWorktreeCheckout"
@@ -257,7 +266,10 @@ export function NewThreadSettingsSection() {
   );
 }
 
-type MachineBetaSetting = "linkedEnvironmentsEnabled" | "fastWorktreeCheckout";
+type MachineBetaSetting =
+  | "linkedEnvironmentsEnabled"
+  | "cloudSessionsEnabled"
+  | "fastWorktreeCheckout";
 
 /** One switch per connected machine that offers the beta, since each machine's own setting decides. */
 function MachineBetaSection({
@@ -269,7 +281,7 @@ function MachineBetaSection({
 }: {
   readonly title: string;
   readonly icon: ComponentProps<typeof SettingsSwitchRow>["icon"];
-  readonly capability: "peerLinks" | "fastWorktreeCheckout";
+  readonly capability: "peerLinks" | "cloudSessions" | "fastWorktreeCheckout";
   readonly setting: MachineBetaSetting;
   readonly description: string;
 }) {
@@ -310,10 +322,7 @@ function MachineBetaSection({
                 void updateSettings({
                   environmentId: environment.environmentId,
                   input: {
-                    patch:
-                      setting === "linkedEnvironmentsEnabled"
-                        ? { linkedEnvironmentsEnabled: value }
-                        : { fastWorktreeCheckout: value },
+                    patch: { [setting]: value },
                   },
                 })
               }

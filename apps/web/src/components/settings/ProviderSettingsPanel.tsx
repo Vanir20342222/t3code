@@ -767,6 +767,19 @@ export function EnvironmentProviderSettings({
 
   for (const providerSettings of visibleProviderSettings) {
     const driver = providerSettings.provider;
+    // Cloud instances are derived on the server from each Codex or Claude instance.
+    if (driver === "codexCloud" || driver === "claudeCloud") {
+      for (const provider of serverProviders) {
+        if (provider.driver !== driver) continue;
+        rows.push({
+          instanceId: provider.instanceId,
+          explicitInstance: settings.providerInstances?.[provider.instanceId],
+          driver,
+          isDefault: false,
+        });
+      }
+      continue;
+    }
     const defaultInstanceId = defaultInstanceIdForDriver(driver);
     const explicitInstance = settings.providerInstances?.[defaultInstanceId];
     const isDirty = explicitInstance !== undefined;

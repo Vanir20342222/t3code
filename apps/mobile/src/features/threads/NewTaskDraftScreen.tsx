@@ -371,11 +371,24 @@ export function NewTaskDraftScreen(props: {
   const { environments, selectedEnvironmentId, switchEnvironment, switchingToEnvironmentId } = flow;
   const cycleEnvironment = () => {
     if (isComposerInteractionLocked) return true;
+    const clouds = flow.cloudMachines.targets.filter((target) => target.disabledReason === null);
+    const cloudIndex = clouds.findIndex(
+      (target) => target.instanceId === flow.cloudMachines.selectedInstanceId,
+    );
+    if (flow.cloudMachines.selectedInstanceId !== null) {
+      flow.cloudMachines.onSelect(clouds[cloudIndex + 1]?.instanceId ?? null);
+      return true;
+    }
+    if (selectedEnvironmentId === environments.at(-1)?.environmentId && clouds[0]) {
+      flow.cloudMachines.onSelect(clouds[0].instanceId);
+      return true;
+    }
     const next = nextEnvironmentId(environments, switchingToEnvironmentId ?? selectedEnvironmentId);
     if (next !== null) void switchEnvironment(next);
     return true;
   };
-  const cycleEnvironmentCommands = environments.length > 1 ? (["cycleHost"] as const) : [];
+  const cycleEnvironmentCommands =
+    environments.length + flow.cloudMachines.targets.length > 1 ? (["cycleHost"] as const) : [];
   useHardwareKeyboardCommand(cycleEnvironmentCommands, cycleEnvironment);
   const preventRemove =
     (isIncomingShareHoldingRoute && !isProjectPickerReturnActive) || flow.submitting;
@@ -747,8 +760,16 @@ export function NewTaskDraftScreen(props: {
   const environmentControl = (
     <DraftEnvironmentControl
       connectionState={connectionState}
-      label={selectedEnvironmentLabel}
-      machineKind={resolveEnvironmentMachineKind(selectedEnvironmentServerConfig)}
+      label={
+        flow.cloudMachines.targets.find(
+          (target) => target.instanceId === flow.cloudMachines.selectedInstanceId,
+        )?.label ?? selectedEnvironmentLabel
+      }
+      machineKind={
+        flow.cloudMachines.selectedInstanceId
+          ? "cloud"
+          : resolveEnvironmentMachineKind(selectedEnvironmentServerConfig)
+      }
       disabled={isComposerInteractionLocked}
       onChooseEnvironment={() => openContextPicker("NewTaskEnvironment")}
     />

@@ -150,3 +150,33 @@ In an existing Codex thread, send `/feedback` with an optional description, for
 example `/feedback The agent stopped before finishing the tests`. This uploads
 the conversation and Codex logs to OpenAI. The returned thread ID can be shared
 with OpenAI support.
+
+## Run tasks in Codex Cloud
+
+Codex Cloud is a beta: turn on **Cloud sessions** in **Settings → Labs** first.
+T3 reaches Codex Cloud through private OpenAI interfaces with your Codex sign-in.
+OpenAI does not support this for other apps and can change or block it without
+notice, and every Codex account is checked for cloud access when T3 starts.
+
+When starting a chat, open the machine picker and choose **Codex Cloud**. Each
+configured Codex account has its own cloud choice and uses that account's CLI
+login, including a custom or shadow Codex home. API-key connections cannot use
+this feature.
+
+Each thread runs in the Codex Cloud environment for the project's GitHub
+repository, found from its `origin` remote. Create and publish one at
+[chatgpt.com/codex](https://chatgpt.com/codex) first; with several, pin one. To
+use a specific environment instead, set its ID in the Codex account's settings.
+
+With Codex Cloud chosen, the model picker lists only the models Codex Cloud
+offers. Choosing Codex Cloud starts its cloud workspace in the background, so the
+first message does not wait for it. Choose a model before sending the first message. Follow-ups keep the same cloud
+conversation and its saved model. Replies stream into T3, and interrupt requests
+are sent to the remote turn. The reasoning level and speed chosen in the composer apply to
+each message and can change between follow-ups; permissions use the cloud defaults.
+
+The cloud workspace is separate from your local project. Cloud file changes appear
+in the transcript for review. Local files and attachments are not uploaded, and
+cloud changes are not automatically applied locally. If the cloud requests an approval,
+open the conversation in Codex to answer it. After a connection loss, check the
+conversation there before resending: remote work can continue after disconnection.
